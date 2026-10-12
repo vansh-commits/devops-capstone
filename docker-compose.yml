@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: helpdesk
+      POSTGRES_USER: helpdesk
+      POSTGRES_PASSWORD: helpdesk  # local demo only; k8s uses a Secret
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U helpdesk -d helpdesk"]
+      interval: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    image: helpdesk-backend:local
+    environment:
+      DATABASE_URL: postgresql+psycopg://helpdesk:helpdesk@postgres:5432/helpdesk
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    image: helpdesk-frontend:local
+    environment:
+      BACKEND_HOST: backend:8000
+    depends_on:
+      - backend
+    ports:
+      - "3000:8080"
+
+volumes:
+  postgres-data:
