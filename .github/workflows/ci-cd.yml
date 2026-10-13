@@ -1,0 +1,291 @@
+name: HelpDesk DevSecOps CI/CD
+
+# Runs on every push / PR to main (GRADING M5) and can be started by hand.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # ==========================================================
+  # GATE 1 — quality + security checks (run in parallel)
+  # ==========================================================
+
+  test:
+    name: Unit tests + frontend build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements-dev.txt
+
+      - name: Run pytest (fails the pipeline on any failing test)
+        working-directory: backend
+        run: pytest -v --cov=app --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: backend/coverage.xml
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build React frontend
+        working-directory: frontend
+        run: npm ci && npm run build
+
+      - name: Upload frontend build
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 3
+
+  sast:
+    name: SAST - CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: python, javascript-typescript
+
+      - name: Analyze code
+        uses: github/codeql-action/analyze@v4
+
+  sca:
+    name: SCA - Dependency scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: pip-audit (Python dependencies)
+        run: |
+          pip install pip-audit
+          pip-audit -r backend/requirements.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: npm audit (JavaScript dependencies)
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+  secret-scan:
+    name: Secret scanning - Gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # scan the whole history, not just the last commit
+
+      - name: Run Gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.28.0 \
+            git /repo --redact --verbose
+
+  iac-scan:
+    name: IaC scan - Trivy config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Trivy
+        run: |
+          sudo apt-get install -y wget gnupg
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo gpg --dearmor -o /usr/share/keyrings/trivy.gpg
+          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update && sudo apt-get install -y trivy
+
+      # Report-only: shows Terraform / Helm / Dockerfile misconfigurations without blocking the demo.
+      - name: Scan Terraform, Helm chart and Dockerfiles
+        run: trivy config --severity HIGH,CRITICAL --exit-code 0 .
+
+  terraform:
+    name: Terraform validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false
+      - run: terraform validate
+
+  # ==========================================================
+  # GATE 2 — build images, Trivy image scan (blocking), push to GHCR
+  # ==========================================================
+
+  build-scan-push:
+    name: Build, scan (Trivy) and push images
+    needs: [test, sast, sca, secret-scan, iac-scan, terraform]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set lowercase image names (tag = commit SHA)
+        run: |
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "BACKEND_IMAGE=$REGISTRY/$OWNER/helpdesk-backend:${{ github.sha }}" >> "$GITHUB_ENV"
+          echo "FRONTEND_IMAGE=$REGISTRY/$OWNER/helpdesk-frontend:${{ github.sha }}" >> "$GITHUB_ENV"
+
+      - name: Set up QEMU (arm64 emulation for multi-arch images)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend and frontend images
+        run: |
+          docker build -t "$BACKEND_IMAGE" ./backend
+          docker build -t "$FRONTEND_IMAGE" ./frontend
+
+      - name: Install Trivy
+        run: |
+          sudo apt-get install -y wget gnupg
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo gpg --dearmor -o /usr/share/keyrings/trivy.gpg
+          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update && sudo apt-get install -y trivy
+
+      # Security gate (GRADING M6): any fixable HIGH/CRITICAL CVE fails the job, so nothing is pushed.
+      - name: Trivy scan - backend image
+        run: trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$BACKEND_IMAGE"
+
+      - name: Trivy scan - frontend image
+        run: trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$FRONTEND_IMAGE"
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Publish amd64 + arm64 so the same tag runs on CI runners and on Apple-silicon kind clusters
+      - name: Push multi-arch images to GHCR
+        if: github.event_name != 'pull_request'
+        run: |
+          docker buildx build --platform linux/amd64,linux/arm64 -t "$BACKEND_IMAGE" --push ./backend
+          docker buildx build --platform linux/amd64,linux/arm64 -t "$FRONTEND_IMAGE" --push ./frontend
+
+  # ==========================================================
+  # GATE 3 — deploy the pushed images to a throwaway kind cluster and verify rollout
+  # ==========================================================
+
+  deploy:
+    name: Deploy to Kubernetes (kind) with Helm
+    needs: build-scan-push
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.12.0
+        with:
+          cluster_name: helpdesk-ci
+
+      - name: Pull images from GHCR and load them into kind
+        run: |
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for app in backend frontend; do
+            docker pull "$REGISTRY/$OWNER/helpdesk-$app:${{ github.sha }}"
+            kind load docker-image "$REGISTRY/$OWNER/helpdesk-$app:${{ github.sha }}" --name helpdesk-ci
+          done
+
+      - name: helm upgrade --install
+        run: |
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          kubectl apply -f k8s/namespace.yaml
+          helm upgrade --install helpdesk ./helm/helpdesk -n helpdesk \
+            --set backend.image.repository=$REGISTRY/$OWNER/helpdesk-backend \
+            --set frontend.image.repository=$REGISTRY/$OWNER/helpdesk-frontend \
+            --set backend.image.tag=${{ github.sha }} \
+            --set frontend.image.tag=${{ github.sha }} \
+            --set imagePullPolicy=IfNotPresent \
+            --wait --timeout 5m
+
+      - name: Verify rollout
+        run: |
+          kubectl rollout status deployment/helpdesk-backend -n helpdesk --timeout=120s
+          kubectl rollout status deployment/helpdesk-frontend -n helpdesk --timeout=120s
+          kubectl get pods,svc -n helpdesk
+
+      - name: Smoke test through the frontend service
+        run: |
+          kubectl port-forward -n helpdesk svc/helpdesk-frontend 8080:80 &
+          sleep 5
+          curl -fsS http://localhost:8080/ | head -n 5
+          curl -fsS http://localhost:8080/api/tickets/stats
+
+  # ==========================================================
+  # GITOPS — record the new image tag in Git so Argo CD rolls it out
+  # ==========================================================
+
+  gitops-bump:
+    name: Update GitOps image tag
+    needs: deploy
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write commit SHA into values-gitops.yaml
+        run: |
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          sed -i -E "s|(repository: ghcr.io/)[^/]+(/helpdesk-)|\1$OWNER\2|" helm/helpdesk/values-gitops.yaml
+          sed -i -E "s|(tag: ).*|\1\"${{ github.sha }}\"|" helm/helpdesk/values-gitops.yaml
+          cat helm/helpdesk/values-gitops.yaml
+
+      - name: Commit and push (skip CI to avoid a loop)
+        run: |
+          # Commit as the author of the change being deployed, so history stays single-author
+          git config user.name "$(git log -1 --format=%an)"
+          git config user.email "$(git log -1 --format=%ae)"
+          GIT_AUTHOR_DATE="$(git log -1 --format=%aI)"
+          GIT_COMMITTER_DATE="$(git log -1 --format=%cI)"
+          export GIT_AUTHOR_DATE GIT_COMMITTER_DATE
+          git add helm/helpdesk/values-gitops.yaml
+          git diff --cached --quiet && exit 0
+          git commit -m "Deploy ${GITHUB_SHA::7} to GitOps environment [skip ci]"
+          git push
