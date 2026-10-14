@@ -1,0 +1,28 @@
+# kube-prometheus-stack values for the local kind cluster.
+# helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack -n monitoring --create-namespace -f monitoring/prometheus-values.yaml
+prometheus:
+  prometheusSpec:
+    # Pick up ServiceMonitors from every namespace, not only ones created by this Helm release
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorNamespaceSelector: {}
+    scrapeInterval: 15s
+    retention: 2d
+
+grafana:
+  enabled: true
+  adminUser: admin
+  adminPassword: helpdesk-admin # local demo only
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      searchNamespace: ALL
+
+alertmanager:
+  enabled: false
+
+# Lighter footprint for a laptop
+kubeEtcd: {enabled: false}
+kubeControllerManager: {enabled: false}
+kubeScheduler: {enabled: false}
+kubeProxy: {enabled: false}
