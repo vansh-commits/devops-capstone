@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars and adjust. Never put AWS keys here — use `aws configure` or env vars.
+aws_region          = "ap-south-1"
+project             = "helpdesk"
+environment         = "dev"
+vpc_cidr            = "10.20.0.0/16"
+cluster_version     = "1.33"
+node_instance_types = ["t3.medium"]
+node_desired_size   = 2
