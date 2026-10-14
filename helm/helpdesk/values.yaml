@@ -1,0 +1,47 @@
+# Default values (CI deploy). Override per environment with values-dev.yaml / values-gitops.yaml.
+imagePullPolicy: IfNotPresent
+imagePullSecrets: []
+
+backend:
+  image:
+    repository: ghcr.io/YOUR_GITHUB_USER/helpdesk-backend
+    tag: latest
+  replicas: 2
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: 500m, memory: 256Mi}
+
+frontend:
+  image:
+    repository: ghcr.io/YOUR_GITHUB_USER/helpdesk-frontend
+    tag: latest
+  replicas: 2
+  resources:
+    requests: {cpu: 50m, memory: 32Mi}
+    limits: {cpu: 200m, memory: 128Mi}
+
+postgres:
+  image: postgres:16-alpine
+  database: helpdesk
+  username: helpdesk
+  password: change-me-in-real-envs # stored in a Kubernetes Secret
+  storage: 1Gi
+
+config:
+  appName: HelpDesk API
+
+ingress:
+  enabled: false
+  className: nginx
+  host: helpdesk.local
+
+hpa:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 50
+
+monitoring:
+  serviceMonitor:
+    enabled: false
+    releaseLabel: kube-prometheus-stack

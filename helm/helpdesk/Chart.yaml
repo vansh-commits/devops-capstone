@@ -1,0 +1,6 @@
+apiVersion: v2
+name: helpdesk
+description: HelpDesk support-ticket app (React + FastAPI + PostgreSQL)
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

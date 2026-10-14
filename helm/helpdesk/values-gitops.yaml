@@ -1,0 +1,16 @@
+# Used by Argo CD. The CI "gitops-bump" job rewrites the repository owner and tag after every green build on main.
+backend:
+  image:
+    repository: ghcr.io/YOUR_GITHUB_USER/helpdesk-backend
+    tag: "latest"
+frontend:
+  image:
+    repository: ghcr.io/YOUR_GITHUB_USER/helpdesk-frontend
+    tag: "latest"
+ingress:
+  enabled: true
+hpa:
+  enabled: true
+monitoring:
+  serviceMonitor:
+    enabled: true

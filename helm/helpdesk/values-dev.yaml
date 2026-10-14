@@ -1,0 +1,13 @@
+# Local kind cluster: images built on your laptop and loaded with `kind load docker-image`.
+imagePullPolicy: Never
+backend:
+  image: {repository: helpdesk-backend, tag: local}
+frontend:
+  image: {repository: helpdesk-frontend, tag: local}
+ingress:
+  enabled: true
+hpa:
+  enabled: true
+monitoring:
+  serviceMonitor:
+    enabled: true
