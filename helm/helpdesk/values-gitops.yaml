@@ -2,12 +2,12 @@
 backend:
   image:
     repository: ghcr.io/vansh-commits/helpdesk-backend
-    tag: "c2c6859ea37fd9a2d93eb55b25845899f30d04d5"
+    tag: "66a0bcda286db7aab0a93fe7503249278d4d7fc5"
 frontend:
   replicas: 2 # GitOps demo: change to 3, commit, push, watch Argo CD scale it
   image:
     repository: ghcr.io/vansh-commits/helpdesk-frontend
-    tag: "c2c6859ea37fd9a2d93eb55b25845899f30d04d5"
+    tag: "66a0bcda286db7aab0a93fe7503249278d4d7fc5"
 ingress:
   enabled: true
   host: gitops.helpdesk.local # separate host so it can run next to the Helm (dev) install
