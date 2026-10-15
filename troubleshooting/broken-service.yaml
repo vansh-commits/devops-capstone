@@ -1,0 +1,14 @@
+# Scenario 2 — Service with no endpoints: selector label does not match any pod.
+# Real backend pods are labelled app=helpdesk-backend.
+apiVersion: v1
+kind: Service
+metadata:
+  name: broken-service
+  namespace: helpdesk
+  labels: {tier: troubleshooting}
+spec:
+  selector:
+    app: helpdesk-api
+  ports:
+    - port: 8000
+      targetPort: 8000

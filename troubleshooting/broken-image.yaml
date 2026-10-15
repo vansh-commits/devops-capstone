@@ -1,0 +1,18 @@
+# Scenario 1 — ImagePullBackOff: the tag does not exist.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broken-image
+  namespace: helpdesk
+  labels: {tier: troubleshooting}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: broken-image}
+  template:
+    metadata:
+      labels: {app: broken-image, tier: troubleshooting}
+    spec:
+      containers:
+        - name: backend
+          image: ghcr.io/example/helpdesk-backend:does-not-exist

@@ -1,0 +1,23 @@
+# Scenario 3 — CrashLoopBackOff: DATABASE_URL points at a host that does not exist,
+# so the Alembic migration fails at start-up and the container exits.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crashloop-bad-db
+  namespace: helpdesk
+  labels: {tier: troubleshooting}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: crashloop-bad-db}
+  template:
+    metadata:
+      labels: {app: crashloop-bad-db, tier: troubleshooting}
+    spec:
+      containers:
+        - name: backend
+          image: helpdesk-backend:local
+          imagePullPolicy: Never
+          env:
+            - name: DATABASE_URL
+              value: postgresql+psycopg://helpdesk:wrong@postgres-typo:5432/helpdesk
