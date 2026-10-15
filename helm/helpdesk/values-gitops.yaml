@@ -9,6 +9,7 @@ frontend:
     tag: "latest"
 ingress:
   enabled: true
+  host: gitops.helpdesk.local # separate host so it can run next to the Helm (dev) install
 hpa:
   enabled: true
 monitoring:
