@@ -236,10 +236,10 @@ jobs:
           OWNER="${GITHUB_REPOSITORY_OWNER,,}"
           kubectl apply -f k8s/namespace.yaml
           helm upgrade --install helpdesk ./helm/helpdesk -n helpdesk \
-            --set backend.image.repository=$REGISTRY/$OWNER/helpdesk-backend \
-            --set frontend.image.repository=$REGISTRY/$OWNER/helpdesk-frontend \
-            --set backend.image.tag=${{ github.sha }} \
-            --set frontend.image.tag=${{ github.sha }} \
+            --set "backend.image.repository=$REGISTRY/$OWNER/helpdesk-backend" \
+            --set "frontend.image.repository=$REGISTRY/$OWNER/helpdesk-frontend" \
+            --set "backend.image.tag=$GITHUB_SHA" \
+            --set "frontend.image.tag=$GITHUB_SHA" \
             --set imagePullPolicy=IfNotPresent \
             --wait --timeout 5m
 

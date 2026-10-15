@@ -1,4 +1,4 @@
-# Scenario 4 — Pending: asks for more CPU than any node has, so the scheduler cannot place it.
+# Scenario 4 — Pending: asks for more CPU/memory than any node has, so the scheduler cannot place it.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,8 +14,10 @@ spec:
       labels: {app: pending-huge-request, tier: troubleshooting}
     spec:
       containers:
-        - name: backend
-          image: helpdesk-backend:local
+        - name: web
+          image: helpdesk-frontend:local
           imagePullPolicy: Never
+          env:
+            - {name: BACKEND_HOST, value: "helpdesk-backend:8000"}
           resources:
             requests: {cpu: "64", memory: 64Gi}

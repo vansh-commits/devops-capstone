@@ -1,4 +1,4 @@
-# Scenario 1 — ImagePullBackOff: the tag does not exist.
+# Scenario 1 — ImagePullBackOff: the image tag does not exist in any registry.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,5 +14,7 @@ spec:
       labels: {app: broken-image, tier: troubleshooting}
     spec:
       containers:
-        - name: backend
-          image: ghcr.io/example/helpdesk-backend:does-not-exist
+        - name: web
+          image: ghcr.io/example/helpdesk-frontend:does-not-exist
+          env:
+            - {name: BACKEND_HOST, value: "helpdesk-backend:8000"}
