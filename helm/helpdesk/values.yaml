@@ -4,7 +4,7 @@ imagePullSecrets: []
 
 backend:
   image:
-    repository: ghcr.io/YOUR_GITHUB_USER/helpdesk-backend
+    repository: ghcr.io/vansh-commits/helpdesk-backend
     tag: latest
   replicas: 2
   resources:
@@ -13,7 +13,7 @@ backend:
 
 frontend:
   image:
-    repository: ghcr.io/YOUR_GITHUB_USER/helpdesk-frontend
+    repository: ghcr.io/vansh-commits/helpdesk-frontend
     tag: latest
   replicas: 2
   resources:

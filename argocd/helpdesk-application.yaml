@@ -9,7 +9,7 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/YOUR_GITHUB_USER/devops-capstone.git # <-- change me
+    repoURL: https://github.com/vansh-commits/devops-capstone.git
     targetRevision: main
     path: helm/helpdesk
     helm:
